@@ -1,26 +1,24 @@
 require('dotenv').config();
-const fs = require('node:fs');
 const path = require('node:path');
 const { REST, Routes } = require('discord.js');
+const logger = require('./utils/logger');
+const loadModules = require('./utils/loadModules');
 
 const { DISCORD_TOKEN, CLIENT_ID, GUILD_ID } = process.env;
 
-const commands = [];
-const commandsPath = path.join(__dirname, 'commands');
-const commandFiles = fs
-  .readdirSync(commandsPath)
-  .filter((file) => file.endsWith('.js'));
-
-for (const file of commandFiles) {
-  const command = require(path.join(commandsPath, file));
-  commands.push(command.data.toJSON());
+if (!DISCORD_TOKEN || !CLIENT_ID) {
+  logger.error('DISCORD_TOKEN et/ou CLIENT_ID sont manquants dans le fichier .env.');
+  process.exit(1);
 }
+
+const commandsPath = path.join(__dirname, 'commands');
+const commands = loadModules(commandsPath).map(({ module: command }) => command.data.toJSON());
 
 const rest = new REST().setToken(DISCORD_TOKEN);
 
 (async () => {
   try {
-    console.log(`Déploiement de ${commands.length} commande(s)...`);
+    logger.info(`Déploiement de ${commands.length} commande(s)...`);
 
     const route = GUILD_ID
       ? Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID)
@@ -28,8 +26,8 @@ const rest = new REST().setToken(DISCORD_TOKEN);
 
     const data = await rest.put(route, { body: commands });
 
-    console.log(`${data.length} commande(s) déployée(s) avec succès.`);
+    logger.success(`${data.length} commande(s) déployée(s) avec succès.`);
   } catch (error) {
-    console.error(error);
+    logger.error('Échec du déploiement des commandes :', error);
   }
 })();
