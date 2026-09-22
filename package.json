@@ -1,0 +1,16 @@
+{
+  "name": "bot-discord",
+  "version": "1.0.0",
+  "description": "Bot Discord basé sur discord.js",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "deploy": "node src/deploy-commands.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5"
+  }
+}
