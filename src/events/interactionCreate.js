@@ -1,5 +1,5 @@
-const { Events, MessageFlags } = require('discord.js');
-const logger = require('../utils/logger');
+const { Events, MessageFlags } = require("discord.js");
+const logger = require("../utils/logger");
 
 module.exports = {
   name: Events.InteractionCreate,
@@ -13,14 +13,20 @@ module.exports = {
       return;
     }
 
-    logger.info(`/${interaction.commandName} exécutée par ${interaction.user.tag} dans #${interaction.channel?.name ?? 'DM'}`);
+    logger.info(
+      `/${interaction.commandName} exécutée par ${interaction.user.tag} dans #${interaction.channel?.name ?? "DM"}`,
+    );
 
     try {
       await command.execute(interaction);
     } catch (error) {
-      logger.error(`Erreur pendant l'exécution de /${interaction.commandName} :`, error);
+      logger.error(
+        `Erreur pendant l'exécution de /${interaction.commandName} :`,
+        error,
+      );
       const reply = {
-        content: "Une erreur s'est produite lors de l'exécution de cette commande.",
+        content:
+          "Une erreur s'est produite lors de l'exécution de cette commande.",
         flags: MessageFlags.Ephemeral,
       };
 
@@ -31,7 +37,10 @@ module.exports = {
           await interaction.reply(reply);
         }
       } catch (fallbackError) {
-        logger.error("Impossible d'envoyer le message d'erreur (interaction probablement expirée) :", fallbackError);
+        logger.error(
+          "Impossible d'envoyer le message d'erreur (interaction probablement expirée) :",
+          fallbackError,
+        );
       }
     }
   },

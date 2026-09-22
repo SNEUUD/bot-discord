@@ -1,5 +1,5 @@
-const fs = require('node:fs');
-const path = require('node:path');
+const fs = require("node:fs");
+const path = require("node:path");
 
 /**
  * Charge tous les modules .js d'un dossier.
@@ -9,7 +9,7 @@ const path = require('node:path');
 function loadModules(dir) {
   return fs
     .readdirSync(dir)
-    .filter((file) => file.endsWith('.js'))
+    .filter((file) => file.endsWith(".js"))
     .map((file) => ({ file, module: require(path.join(dir, file)) }));
 }
 
