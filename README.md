@@ -6,7 +6,8 @@ Base d'un bot Discord en Node.js avec [discord.js](https://discord.js.org/) v14.
 
 ```
 src/
-  commands/          # une commande slash par fichier (data + execute)
+  commands/          # une commande slash par fichier (data, execute, autocomplete?)
+  components/        # un bouton / menu / modale par fichier (customId, execute)
   events/            # un événement Discord.js par fichier (name, once?, execute)
   index.js           # point d'entrée : charge commandes/événements et se connecte
   deploy-commands.js # enregistre les slash commands auprès de Discord
@@ -29,12 +30,16 @@ Renseigner dans `.env` :
 ```bash
 npm run deploy   # enregistre les commandes slash
 npm start        # démarre le bot
-npm run dev       # démarre le bot avec rechargement auto (node --watch)
+npm run dev      # démarre le bot avec rechargement auto (node --watch)
 ```
 
 ## Ajouter une commande
 
 Créer un fichier dans `src/commands/` exportant `{ data, execute }` (voir `ping.js`).
+
+## Ajouter un composant (bouton, menu, modale)
+
+Créer un fichier dans `src/components/` exportant `{ customId, execute }`. Les interactions dont le `customId` vaut `customId` ou commence par `customId:` lui sont routées, ce qui permet de passer des paramètres (ex. `role:123456`).
 
 ## Ajouter un événement
 

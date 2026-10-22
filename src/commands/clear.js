@@ -2,6 +2,7 @@ const {
   SlashCommandBuilder,
   PermissionFlagsBits,
   MessageFlags,
+  InteractionContextType,
 } = require("discord.js");
 const logger = require("../utils/logger");
 
@@ -18,7 +19,7 @@ module.exports = {
         .setRequired(true),
     )
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages)
-    .setDMPermission(false),
+    .setContexts(InteractionContextType.Guild),
   async execute(interaction) {
     const amount = interaction.options.getInteger("nombre", true);
 
@@ -28,6 +29,15 @@ module.exports = {
     ) {
       await interaction.reply({
         content: "Cette commande ne peut pas être utilisée ici.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+
+    if (!interaction.appPermissions.has(PermissionFlagsBits.ManageMessages)) {
+      await interaction.reply({
+        content:
+          "Je n'ai pas la permission « Gérer les messages » dans ce salon.",
         flags: MessageFlags.Ephemeral,
       });
       return;

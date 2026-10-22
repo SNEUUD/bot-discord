@@ -14,8 +14,8 @@ if (!DISCORD_TOKEN || !CLIENT_ID) {
 }
 
 const commandsPath = path.join(__dirname, "commands");
-const commands = loadModules(commandsPath).map(({ module: command }) =>
-  command.data.toJSON(),
+const commands = loadModules(commandsPath, ["data", "execute"]).map(
+  ({ module: command }) => command.data.toJSON(),
 );
 
 const rest = new REST().setToken(DISCORD_TOKEN);

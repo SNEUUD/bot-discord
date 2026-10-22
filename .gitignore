@@ -1,3 +1,6 @@
 node_modules/
 .env
 npm-debug.log*
+
+# macOS
+.DS_Store
