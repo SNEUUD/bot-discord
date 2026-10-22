@@ -10,7 +10,7 @@ src/
   components/        # un bouton / menu / modale par fichier (customId, execute)
   events/            # un événement Discord.js par fichier (name, once?, execute)
   index.js           # point d'entrée : charge commandes/événements et se connecte
-  deploy-commands.js # enregistre les slash commands auprès de Discord
+  deploy-commands.js # enregistre les slash commands sans démarrer le bot
 ```
 
 ## Installation
@@ -22,16 +22,18 @@ cp .env.example .env
 
 Renseigner dans `.env` :
 - `DISCORD_TOKEN` : token du bot (portail développeur Discord > Bot)
-- `CLIENT_ID` : ID de l'application
-- `GUILD_ID` (optionnel) : ID d'un serveur pour un déploiement instantané des commandes en dev. Sans elle, le déploiement est global (peut prendre jusqu'à 1h à se propager).
+- `CLIENT_ID` : ID de l'application (utilisé uniquement par `npm run deploy`)
+- `GUILD_ID` (optionnel) : ID d'un serveur pour un enregistrement instantané des commandes. Sans elle, l'enregistrement est global (peut prendre jusqu'à 1h à se propager).
 
 ## Utilisation
 
 ```bash
-npm run deploy   # enregistre les commandes slash
 npm start        # démarre le bot
 npm run dev      # démarre le bot avec rechargement auto (node --watch)
+npm run deploy   # enregistre les commandes slash sans démarrer le bot
 ```
+
+Les commandes slash sont enregistrées automatiquement à chaque démarrage du bot : un déploiement (ex. Coolify) suffit à les mettre à jour, `npm run deploy` n'est pas nécessaire.
 
 ## Ajouter une commande
 
