@@ -13,6 +13,8 @@
     "deploy": "node src/deploy-commands.js"
   },
   "dependencies": {
+    "cron-parser": "^5.10.2",
+    "cronstrue": "^3.38.0",
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.5"
   }

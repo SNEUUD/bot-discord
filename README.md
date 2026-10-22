@@ -35,6 +35,26 @@ npm run deploy   # enregistre les commandes slash sans démarrer le bot
 
 Les commandes slash sont enregistrées automatiquement à chaque démarrage du bot : un déploiement (ex. Coolify) suffit à les mettre à jour, `npm run deploy` n'est pas nécessaire.
 
+## Commandes
+
+| Commande | Description |
+|---|---|
+| `/ping` | Latence du bot |
+| `/clear <nombre>` | Supprime des messages dans le salon |
+| `/json [mode] [json]` | Formate, minifie ou valide du JSON (sans `json`, ouvre un champ de saisie) |
+| `/jwt <token>` | Décode un JWT et affiche ses dates (signature non vérifiée) |
+| `/regex <motif> <texte> [flags]` | Teste une regex et liste les correspondances et groupes |
+| `/base64 encoder\|decoder <texte> [url]` | Encode ou décode du base64 / base64url |
+| `/hash <texte> [algorithme]` | MD5, SHA-1, SHA-256, SHA-512 |
+| `/uuid [nombre]` | Génère des UUID v4 |
+| `/timestamp [date]` | Convertit une date ↔ timestamp Unix ↔ formats Discord `<t:…>` |
+| `/cron <expression> [fuseau]` | Explique une expression cron et donne les 5 prochaines exécutions |
+| `/http <code>` | Explique un code de statut HTTP (avec autocomplétion) |
+| `/npm <paquet>` | Version, licence, téléchargements et date de publication d'un paquet |
+| `/color <valeur>` | Aperçu d'une couleur et conversions HEX / RGB / HSL |
+
+Les réponses des commandes utilitaires sont éphémères (visibles uniquement par l'auteur de la commande) ; un résultat trop long pour un message est envoyé en fichier joint.
+
 ## Ajouter une commande
 
 Créer un fichier dans `src/commands/` exportant `{ data, execute }` (voir `ping.js`).
