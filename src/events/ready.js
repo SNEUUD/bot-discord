@@ -20,6 +20,18 @@ module.exports = {
       logger.success(
         `${registered.size} commande(s) enregistrée(s) ${GUILD_ID ? "sur le serveur" : "globalement"}.`,
       );
+
+      // Des commandes globales (ex. un ancien `npm run deploy` sans GUILD_ID)
+      // s'afficheraient en double avec celles du serveur.
+      if (GUILD_ID) {
+        const globalCommands = await client.application.commands.fetch();
+        if (globalCommands.size > 0) {
+          await client.application.commands.set([]);
+          logger.info(
+            `${globalCommands.size} commande(s) globale(s) supprimée(s) pour éviter les doublons.`,
+          );
+        }
+      }
     } catch (error) {
       logger.error("Échec de l'enregistrement des commandes :", error);
     }
