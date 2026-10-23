@@ -5,12 +5,72 @@ const {
   MessageFlags,
 } = require("discord.js");
 const replyWithCode = require("../utils/replyWithCode");
+const translateError = require("../utils/translateError");
 
 const MODES = {
   formater: "Formater",
   minifier: "Minifier",
   valider: "Valider",
 };
+
+// Messages de JSON.parse (V8). Les anciennes versions de Node utilisent la
+// forme courte "Unexpected token } in JSON at position 5".
+const JSON_ERRORS = [
+  [/^Unexpected end of JSON input$/, "le JSON se termine trop tôt"],
+  [/^Expected property name or '\}'$/, "nom de propriété ou « } » attendu"],
+  [
+    /^Expected double-quoted property name$/,
+    "nom de propriété entre guillemets doubles attendu",
+  ],
+  [
+    /^Expected ':' after property name$/,
+    "« : » attendu après le nom de propriété",
+  ],
+  [
+    /^Expected ',' or '\}' after property value$/,
+    "« , » ou « } » attendu après la valeur",
+  ],
+  [
+    /^Expected ',' or '\]' after array element$/,
+    "« , » ou « ] » attendu après l'élément du tableau",
+  ],
+  [/^Unterminated string$/, "chaîne non fermée"],
+  [
+    /^Bad control character in string literal$/,
+    "caractère de contrôle dans une chaîne (retour à la ligne non échappé ?)",
+  ],
+  [/^Bad escaped character$/, "séquence d'échappement invalide"],
+  [/^Bad Unicode escape$/, "séquence d'échappement Unicode invalide"],
+  [
+    /^Unexpected non-whitespace character after JSON$/,
+    "contenu en trop après la fin du JSON",
+  ],
+  [/^Exponent part is missing a number$/, "exposant sans nombre"],
+  [/^No number after minus sign$/, "aucun nombre après le signe moins"],
+  [/^Unterminated fractional number$/, "nombre décimal incomplet"],
+  [
+    /^Unexpected token '(.+?)', [\s\S]* is not valid JSON$/,
+    "caractère inattendu « $1 »",
+  ],
+  [/^Unexpected token (.)$/, "caractère inattendu « $1 »"],
+  [/^Unexpected string$/, "chaîne inattendue"],
+  [/^Unexpected number$/, "nombre inattendu"],
+  [/^"[\s\S]*" is not valid JSON$/, "valeur non reconnue"],
+];
+const JSON_ERROR_LOCATION =
+  / (?:in JSON )?at position (\d+)(?: \(line (\d+) column (\d+)\))?$/;
+
+function translateJsonError(message) {
+  const location = message.match(JSON_ERROR_LOCATION);
+  const reason = translateError(
+    message.replace(JSON_ERROR_LOCATION, ""),
+    JSON_ERRORS,
+    "syntaxe invalide",
+  );
+  if (!location) return reason;
+  const [, position, line, column] = location;
+  return `${reason} (${line ? `ligne ${line}, colonne ${column}` : `position ${position}`})`;
+}
 
 function describe(value) {
   if (Array.isArray(value)) return `tableau de ${value.length} élément(s)`;
@@ -33,7 +93,7 @@ async function processJson(interaction, input, mode) {
     parsed = JSON.parse(input);
   } catch (error) {
     await interaction.reply({
-      content: `❌ JSON invalide : ${error.message}`,
+      content: `❌ JSON invalide : ${translateJsonError(error.message)}.`,
       flags: MessageFlags.Ephemeral,
     });
     return;

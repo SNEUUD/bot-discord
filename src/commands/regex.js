@@ -1,9 +1,56 @@
 const vm = require("node:vm");
 const { SlashCommandBuilder, MessageFlags, inlineCode } = require("discord.js");
 const replyWithCode = require("../utils/replyWithCode");
+const translateError = require("../utils/translateError");
 
 const MAX_DISPLAYED_MATCHES = 25;
 const TIMEOUT_MS = 1000;
+
+// Messages de V8, après le préfixe "Invalid regular expression: /motif/flags: ".
+const REGEX_ERRORS = [
+  [/^Unterminated group$/, "groupe non fermé (« ) » manquante)"],
+  [/^Unmatched '\)'$/, "« ) » sans « ( » correspondante"],
+  [/^Nothing to repeat$/, "quantificateur (*, +, ?, {…}) sans rien à répéter"],
+  [/^Lone quantifier brackets$/, "accolade de quantificateur isolée"],
+  [/^Incomplete quantifier$/, "quantificateur incomplet"],
+  [/^Invalid quantifier$/, "quantificateur invalide"],
+  [
+    /^numbers out of order in \{\} quantifier$/,
+    "nombres dans le désordre dans le quantificateur {}",
+  ],
+  [
+    /^Unterminated character class$/,
+    "classe de caractères non fermée (« ] » manquant)",
+  ],
+  [
+    /^Range out of order in character class$/,
+    "plage dans le désordre dans la classe de caractères",
+  ],
+  [/^Invalid character class$/, "classe de caractères invalide"],
+  [/^Invalid group$/, "groupe invalide"],
+  [/^Invalid capture group name$/, "nom de groupe de capture invalide"],
+  [/^Duplicate capture group name$/, "nom de groupe de capture en double"],
+  [
+    /^Invalid named capture referenced$/,
+    "référence à un groupe nommé inexistant",
+  ],
+  [/^Invalid named reference$/, "référence nommée invalide"],
+  [/^\\ at end of pattern$/, "« \\ » à la fin du motif"],
+  [/^Invalid unicode escape$/i, "séquence d'échappement Unicode invalide"],
+  [
+    /^Invalid class escape$/,
+    "séquence d'échappement invalide dans la classe de caractères",
+  ],
+  [/^Invalid decimal escape$/, "séquence d'échappement décimale invalide"],
+  [/^Invalid escape$/, "séquence d'échappement invalide"],
+  [
+    /^Invalid property name in character class$/,
+    "propriété Unicode invalide dans la classe de caractères",
+  ],
+  [/^Invalid property name$/, "propriété Unicode invalide"],
+  [/^Regular expression too large$/, "expression régulière trop grande"],
+];
+const REGEX_ERROR_PREFIX = /^Invalid regular expression: \/[\s\S]*\/[a-z]*: /;
 
 // Exécuté dans un contexte isolé avec un timeout pour qu'une regex
 // catastrophique (backtracking exponentiel) ne bloque pas le bot.
@@ -65,6 +112,13 @@ module.exports = {
       });
       return;
     }
+    if (extraFlags.includes("u") && extraFlags.includes("v")) {
+      await interaction.reply({
+        content: "❌ Flags invalides : u et v ne peuvent pas être combinés.",
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
     const flags = [...new Set(`g${extraFlags}`)].join("");
 
     let matches;
@@ -77,7 +131,11 @@ module.exports = {
       const reason =
         error.code === "ERR_SCRIPT_EXECUTION_TIMEOUT"
           ? `l'exécution a dépassé ${TIMEOUT_MS} ms (backtracking excessif ?)`
-          : error.message;
+          : translateError(
+              error.message.replace(REGEX_ERROR_PREFIX, ""),
+              REGEX_ERRORS,
+              "syntaxe invalide",
+            );
       await interaction.reply({
         content: `❌ Regex invalide : ${reason}`,
         flags: MessageFlags.Ephemeral,
