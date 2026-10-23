@@ -1,10 +1,23 @@
-const { Events, MessageFlags } = require("discord.js");
+const { Events, MessageFlags, RESTJSONErrorCodes } = require("discord.js");
 const logger = require("../utils/logger");
 
 const ERROR_REPLY = {
   content: "Une erreur s'est produite lors de l'exécution de cette commande.",
   flags: MessageFlags.Ephemeral,
 };
+
+// Discord laisse 3 secondes pour répondre : au-delà, le jeton expire et
+// toute réponse (y compris le message d'erreur) échoue avec ce code.
+function isExpiredInteraction(error) {
+  return error?.code === RESTJSONErrorCodes.UnknownInteraction;
+}
+
+function warnExpired(interaction, label) {
+  const age = Date.now() - interaction.createdTimestamp;
+  logger.warn(
+    `Interaction expirée avant la réponse de ${label} (${age} ms après sa création).`,
+  );
+}
 
 async function replyWithError(interaction) {
   try {
@@ -36,6 +49,10 @@ async function handleCommand(interaction) {
   try {
     await command.execute(interaction);
   } catch (error) {
+    if (isExpiredInteraction(error)) {
+      warnExpired(interaction, `/${interaction.commandName}`);
+      return;
+    }
     logger.error(
       `Erreur pendant l'exécution de /${interaction.commandName} :`,
       error,
@@ -70,6 +87,10 @@ async function handleComponent(interaction) {
   try {
     await component.execute(interaction);
   } catch (error) {
+    if (isExpiredInteraction(error)) {
+      warnExpired(interaction, `"${interaction.customId}"`);
+      return;
+    }
     logger.error(
       `Erreur pendant l'exécution du composant "${interaction.customId}" :`,
       error,

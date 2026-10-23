@@ -1,6 +1,7 @@
 require("dotenv").config();
 const path = require("node:path");
 const { Client, Collection, GatewayIntentBits } = require("discord.js");
+const { Agent } = require("undici");
 const logger = require("./utils/logger");
 const loadModules = require("./utils/loadModules");
 
@@ -11,8 +12,18 @@ if (!DISCORD_TOKEN) {
   process.exit(1);
 }
 
+// Par défaut, undici ferme la connexion HTTP après 4 s d'inactivité : la
+// première réponse après une pause doit alors refaire DNS + TCP + TLS, ce qui
+// peut dépasser les 3 s que Discord accorde pour répondre à une interaction.
+const KEEP_ALIVE_MS = 10 * 60_000;
 const client = new Client({
   intents: [GatewayIntentBits.Guilds],
+  rest: {
+    agent: new Agent({
+      keepAliveTimeout: KEEP_ALIVE_MS,
+      keepAliveMaxTimeout: KEEP_ALIVE_MS,
+    }),
+  },
 });
 
 client.commands = new Collection();

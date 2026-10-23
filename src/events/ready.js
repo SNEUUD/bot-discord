@@ -1,13 +1,26 @@
-const { Events } = require("discord.js");
+const { Events, Routes } = require("discord.js");
 const logger = require("../utils/logger");
 
 const { GUILD_ID } = process.env;
+
+// Une requête légère par minute garde la connexion vers l'API ouverte, pour
+// que les réponses aux interactions n'aient pas à la rétablir.
+const WARMUP_INTERVAL_MS = 60_000;
+
+function keepRestConnectionWarm(client) {
+  setInterval(() => {
+    client.rest.get(Routes.gateway()).catch((error) => {
+      logger.warn("Échec de la requête de maintien de connexion :", error);
+    });
+  }, WARMUP_INTERVAL_MS).unref();
+}
 
 module.exports = {
   name: Events.ClientReady,
   once: true,
   async execute(client) {
     logger.success(`Connecté en tant que ${client.user.tag}.`);
+    keepRestConnectionWarm(client);
 
     // Enregistre les commandes à chaque démarrage pour qu'un déploiement
     // (ex. Coolify) suffise à les mettre à jour sur Discord.
