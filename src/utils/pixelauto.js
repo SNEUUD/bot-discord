@@ -26,6 +26,9 @@ class PixelautoError extends Error {
   }
 }
 
+const NOT_CONFIGURED_MESSAGE =
+  "❌ L'API pixelauto n'est pas configurée (PIXELAUTO_URL et API_KEY dans le .env).";
+
 function isConfigured() {
   return Boolean(PIXELAUTO_URL && API_KEY);
 }
@@ -70,6 +73,7 @@ async function requestJson(method, route, options) {
 }
 
 module.exports = {
+  NOT_CONFIGURED_MESSAGE,
   PixelautoError,
   isConfigured,
   /** Met un épisode en file d'attente. */

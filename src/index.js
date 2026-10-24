@@ -17,7 +17,8 @@ if (!DISCORD_TOKEN) {
 // peut dépasser les 3 s que Discord accorde pour répondre à une interaction.
 const KEEP_ALIVE_MS = 10 * 60_000;
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds],
+  // GuildMessages : messages qui mentionnent le bot avec des épisodes (/video).
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages],
   rest: {
     agent: new Agent({
       keepAliveTimeout: KEEP_ALIVE_MS,

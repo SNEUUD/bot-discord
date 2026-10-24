@@ -7,6 +7,7 @@ const {
   EmbedBuilder,
   GuildPremiumTier,
   RESTJSONErrorCodes,
+  StringSelectMenuBuilder,
   time,
 } = require("discord.js");
 const logger = require("./logger");
@@ -29,8 +30,9 @@ const STATUSES = {
   done: ["✅ Terminé", 0x57f287],
   failed: ["❌ Échec", 0xed4245],
   cancelled: ["🚫 Annulé", 0x4f545c],
+  deleted: ["🗑️ Supprimé", 0x4f545c],
 };
-const FINAL_STATUSES = new Set(["done", "failed", "cancelled"]);
+const FINAL_STATUSES = new Set(["done", "failed", "cancelled", "deleted"]);
 const STEPS = { voix: "voix (1/2)", vidéo: "vidéo (2/2)" };
 
 function formatSize(bytes) {
@@ -44,11 +46,15 @@ function formatSeconds(seconds) {
     : `${Math.floor(rounded / 60)} min ${String(rounded % 60).padStart(2, "0")} s`;
 }
 
-function progressBar(progress) {
+function progressBar(progress, length = PROGRESS_BAR_LENGTH) {
   const filled = Math.round(
-    (Math.min(Math.max(progress, 0), 100) / 100) * PROGRESS_BAR_LENGTH,
+    (Math.min(Math.max(progress, 0), 100) / 100) * length,
   );
-  return `${"▰".repeat(filled)}${"▱".repeat(PROGRESS_BAR_LENGTH - filled)} ${Math.round(progress)} %`;
+  return `${"▰".repeat(filled)}${"▱".repeat(length - filled)} ${Math.round(progress)} %`;
+}
+
+function videoTitle(video) {
+  return video.title ?? video.episode ?? video.id;
 }
 
 /**
@@ -92,7 +98,7 @@ function buildEmbed(video) {
   }
 
   const embed = new EmbedBuilder()
-    .setTitle(`🎬 ${video.title ?? video.episode ?? video.id}`)
+    .setTitle(`🎬 ${videoTitle(video)}`)
     .setColor(color)
     .setDescription(lines.join("\n"))
     .addFields(
@@ -140,22 +146,101 @@ function buildEmbed(video) {
   return embed;
 }
 
-function cancelRow(video, userId) {
+function summaryLine(video) {
+  const [label] = STATUSES[video.status] ?? [video.status];
+  let detail;
+  switch (video.status) {
+    case "queued":
+      detail =
+        video.position != null ? `file d'attente : ${video.position}` : "";
+      break;
+    case "running":
+      detail = `${video.step ?? "rendu"} ${progressBar(video.progress ?? 0, 8)}`;
+      break;
+    case "done":
+      detail = [
+        video.duration && formatSeconds(video.duration),
+        video.size && formatSize(video.size),
+      ]
+        .filter(Boolean)
+        .join(", ");
+      break;
+    default:
+      detail = label.slice(label.indexOf(" ") + 1).toLowerCase();
+  }
+  return `${label.split(" ")[0]} **${videoTitle(video)}** · \`${video.id}\`${detail ? `\n${detail}` : ""}`;
+}
+
+/**
+ * Embed résumant l'état de plusieurs rendus, une ligne par vidéo.
+ * @param {object[]} videos
+ */
+function buildListEmbed(videos) {
+  const active = videos.filter((video) => !FINAL_STATUSES.has(video.status));
+  const done = videos.filter((video) => video.status === "done").length;
+  const [, color] =
+    active.length > 0
+      ? STATUSES[
+          active.some((v) => v.status === "running") ? "running" : "queued"
+        ]
+      : STATUSES[videos.some((v) => v.status === "failed") ? "failed" : "done"];
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🎬 ${videos.length} vidéos`)
+    .setColor(color)
+    .setDescription(
+      `**${done}/${videos.length} terminée(s)**\n\n${videos.map(summaryLine).join("\n\n")}`.slice(
+        0,
+        4096,
+      ),
+    );
+  if (active.length > 0) embed.setFooter({ text: "Mis à jour en direct" });
+  return embed;
+}
+
+function cancelRow(videos, userId) {
+  if (videos.length === 1) {
+    return new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`video:annuler:${userId}:${videos[0].id}`)
+        .setLabel("Annuler le rendu")
+        .setEmoji("🛑")
+        .setStyle(ButtonStyle.Danger),
+    );
+  }
+  const options = videos.slice(0, 25).map((video) => ({
+    label: videoTitle(video).slice(0, 100),
+    description: `${STATUSES[video.status]?.[0] ?? video.status} · ${video.id}`,
+    value: video.id,
+  }));
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`video:annuler:${video.id}:${userId}`)
-      .setLabel("Annuler le rendu")
-      .setEmoji("🛑")
-      .setStyle(ButtonStyle.Danger),
+    new StringSelectMenuBuilder()
+      .setCustomId(`video:annuler:${userId}`)
+      .setPlaceholder("🛑 Annuler des rendus…")
+      .setMinValues(1)
+      .setMaxValues(options.length)
+      .addOptions(options),
   );
 }
 
-function trackingPayload(video, userId, note = "") {
-  const active = !FINAL_STATUSES.has(video.status) && !note;
+/**
+ * Contenu du message de suivi d'un ou plusieurs rendus.
+ * @param {object[]} videos
+ * @param {string} userId - Auteur de la demande (seul à pouvoir annuler).
+ * @param {object} [options]
+ * @param {string} [options.header] - Texte affiché au-dessus du suivi.
+ * @param {string} [options.note] - Raison de l'arrêt du suivi.
+ */
+function trackingPayload(videos, userId, { header = "", note = "" } = {}) {
+  const active = note
+    ? []
+    : videos.filter((video) => !FINAL_STATUSES.has(video.status));
   return {
-    content: note,
-    embeds: [buildEmbed(video)],
-    components: active ? [cancelRow(video, userId)] : [],
+    content: [header, note].filter(Boolean).join("\n"),
+    embeds: [
+      videos.length === 1 ? buildEmbed(videos[0]) : buildListEmbed(videos),
+    ],
+    components: active.length > 0 ? [cancelRow(active, userId)] : [],
   };
 }
 
@@ -218,121 +303,77 @@ async function sendVideoFile(video, guild, send, content = "") {
 }
 
 /**
- * Accès au message de suivi d'une interaction, au-delà de la durée de vie de
- * son jeton.
+ * Message de suivi rattaché à une interaction. Au-delà de la durée de vie du
+ * jeton, il est modifié comme un message classique du bot.
  * @param {import("discord.js").ChatInputCommandInteraction | import("discord.js").ModalSubmitInteraction} interaction
  * @param {import("discord.js").Message} message - Réponse ou suivi (followUp) de l'interaction.
  */
-function replyHandle(interaction, message) {
+function interactionTarget(interaction, message) {
   const tokenValid = () =>
     Date.now() - interaction.createdTimestamp < INTERACTION_TOKEN_MS;
-
   return {
-    /** Modifie le message de suivi ; renvoie false s'il a été supprimé. */
-    async edit(payload) {
-      try {
-        await (tokenValid()
-          ? interaction.editReply({ ...payload, message })
-          : message.edit(payload));
-        return true;
-      } catch (error) {
-        if (
-          error?.code === RESTJSONErrorCodes.UnknownMessage ||
-          error?.code === RESTJSONErrorCodes.UnknownWebhook
-        ) {
-          return false;
-        }
-        logger.warn("Impossible de mettre à jour le suivi du rendu :", error);
-        return true;
-      }
-    },
-    /** Envoie un nouveau message dans le salon (qui notifie, contrairement à une modification). */
-    send(payload) {
-      return tokenValid()
+    userId: interaction.user.id,
+    guild: interaction.guild,
+    edit: (payload) =>
+      tokenValid()
+        ? interaction.editReply({ ...payload, message })
+        : message.edit(payload),
+    send: (payload) =>
+      tokenValid()
         ? interaction.followUp(payload)
-        : interaction.channel.send(payload);
-    },
+        : interaction.channel.send(payload),
   };
 }
 
 /**
- * Suit un rendu en modifiant un message de l'interaction jusqu'à la fin, puis
- * envoie la vidéo (ou l'erreur) en mentionnant l'auteur de la commande.
- * @param {import("discord.js").ChatInputCommandInteraction | import("discord.js").ModalSubmitInteraction} interaction
- * @param {object} video - État initial du rendu.
- * @param {import("discord.js").Message} message - Message de suivi à modifier.
+ * Message de suivi envoyé en réponse à un message (pièces jointes).
+ * @param {import("discord.js").Message} message - Message de suivi du bot.
+ * @param {string} userId - Auteur de la demande.
  */
-async function trackVideo(interaction, video, message) {
-  const userId = interaction.user.id;
-  const reply = replyHandle(interaction, message);
-  const startedAt = Date.now();
-  let lastState = null;
-  let failures = 0;
+function messageTarget(message, userId) {
+  return {
+    userId,
+    guild: message.guild,
+    edit: (payload) => message.edit(payload),
+    send: (payload) => message.channel.send(payload),
+  };
+}
 
-  for (;;) {
-    const state = [
-      video.status,
-      video.step,
-      video.progress,
-      video.position,
-    ].join("|");
-    if (state !== lastState) {
-      lastState = state;
-      if (!(await reply.edit(trackingPayload(video, userId)))) return;
+/** Modifie le message de suivi ; renvoie false s'il a été supprimé. */
+async function editTracking(target, payload) {
+  try {
+    await target.edit(payload);
+    return true;
+  } catch (error) {
+    if (
+      error?.code === RESTJSONErrorCodes.UnknownMessage ||
+      error?.code === RESTJSONErrorCodes.UnknownWebhook
+    ) {
+      return false;
     }
-    if (FINAL_STATUSES.has(video.status)) break;
-
-    if (Date.now() - startedAt > MAX_TRACKING_MS) {
-      await reply.edit(
-        trackingPayload(
-          video,
-          userId,
-          `⌛ Suivi arrêté au bout de 2 h. Reprendre avec \`/video suivre id:${video.id}\`.`,
-        ),
-      );
-      return;
-    }
-
-    await sleep(POLL_INTERVAL_MS);
-    try {
-      video = await pixelauto.getVideo(video.id);
-      failures = 0;
-    } catch (error) {
-      if (error.status === 404) {
-        await reply.edit(
-          trackingPayload(video, userId, "🗑️ Ce rendu a été supprimé."),
-        );
-        return;
-      }
-      failures += 1;
-      logger.warn(
-        `Échec du suivi du rendu ${video.id} (${failures}/${MAX_CONSECUTIVE_FAILURES}) : ${error.message}`,
-      );
-      if (failures >= MAX_CONSECUTIVE_FAILURES) {
-        await reply.edit(
-          trackingPayload(
-            video,
-            userId,
-            `⚠️ Suivi interrompu : ${error.message}. Reprendre avec \`/video suivre id:${video.id}\`.`,
-          ),
-        );
-        return;
-      }
-    }
+    logger.warn("Impossible de mettre à jour le suivi du rendu :", error);
+    return true;
   }
+}
 
-  const title = `**${video.title ?? video.id}**`;
+/**
+ * Envoie le résultat d'un rendu terminé dans un nouveau message (qui notifie,
+ * contrairement à une modification) en mentionnant l'auteur de la demande.
+ */
+async function deliverResult(target, video) {
+  const { userId } = target;
+  const title = `**${videoTitle(video)}**`;
   const mention = { allowedMentions: { users: [userId] } };
   try {
     if (video.status === "done") {
       await sendVideoFile(
         video,
-        interaction.guild,
-        (payload) => reply.send({ ...payload, ...mention }),
+        target.guild,
+        (payload) => target.send({ ...payload, ...mention }),
         `<@${userId}> 🎬 La vidéo ${title} est prête !`,
       );
     } else if (video.status === "failed") {
-      await reply.send({
+      await target.send({
         content: `<@${userId}> ❌ Le rendu de ${title} a échoué. Détail : \`/video journal id:${video.id}\`.`,
         ...mention,
       });
@@ -342,7 +383,7 @@ async function trackVideo(interaction, video, message) {
       `Impossible d'envoyer le résultat du rendu ${video.id} :`,
       error,
     );
-    await reply
+    await target
       .send({
         content: `<@${userId}> ⚠️ La vidéo ${title} est prête mais n'a pas pu être envoyée (${error.message}). Réessayer avec \`/video telecharger id:${video.id}\`.`,
         ...mention,
@@ -351,11 +392,102 @@ async function trackVideo(interaction, video, message) {
   }
 }
 
+/**
+ * Suit un ou plusieurs rendus en modifiant le message de suivi jusqu'à ce
+ * qu'ils soient tous terminés, et envoie chaque vidéo (ou erreur) dès qu'elle
+ * est prête.
+ * @param {ReturnType<typeof interactionTarget>} target - Message de suivi.
+ * @param {object[]} videos - États initiaux des rendus.
+ * @param {object} [options]
+ * @param {string} [options.header] - Texte affiché au-dessus du suivi.
+ */
+async function trackVideos(target, videos, { header = "" } = {}) {
+  const { userId } = target;
+  const delivered = new Set();
+  const startedAt = Date.now();
+  const resume =
+    videos.length === 1
+      ? `\`/video suivre id:${videos[0].id}\``
+      : "`/video suivre`";
+  let lastState = null;
+  let failures = 0;
+
+  for (;;) {
+    const state = videos
+      .map((video) =>
+        [video.status, video.step, video.progress, video.position].join("|"),
+      )
+      .join(";");
+    if (state !== lastState) {
+      lastState = state;
+      const payload = trackingPayload(videos, userId, { header });
+      if (!(await editTracking(target, payload))) return;
+    }
+
+    for (const video of videos) {
+      if (FINAL_STATUSES.has(video.status) && !delivered.has(video.id)) {
+        delivered.add(video.id);
+        await deliverResult(target, video);
+      }
+    }
+    if (videos.every((video) => FINAL_STATUSES.has(video.status))) return;
+
+    if (Date.now() - startedAt > MAX_TRACKING_MS) {
+      await editTracking(
+        target,
+        trackingPayload(videos, userId, {
+          header,
+          note: `⌛ Suivi arrêté au bout de 2 h. Reprendre avec ${resume}.`,
+        }),
+      );
+      return;
+    }
+
+    await sleep(POLL_INTERVAL_MS);
+    let lastError = null;
+    videos = await Promise.all(
+      videos.map(async (video) => {
+        if (FINAL_STATUSES.has(video.status)) return video;
+        try {
+          return await pixelauto.getVideo(video.id);
+        } catch (error) {
+          if (error.status === 404) return { ...video, status: "deleted" };
+          lastError = error;
+          return video;
+        }
+      }),
+    );
+
+    if (!lastError) {
+      failures = 0;
+      continue;
+    }
+    failures += 1;
+    logger.warn(
+      `Échec du suivi des rendus (${failures}/${MAX_CONSECUTIVE_FAILURES}) : ${lastError.message}`,
+    );
+    if (failures >= MAX_CONSECUTIVE_FAILURES) {
+      await editTracking(
+        target,
+        trackingPayload(videos, userId, {
+          header,
+          note: `⚠️ Suivi interrompu : ${lastError.message}. Reprendre avec ${resume}.`,
+        }),
+      );
+      return;
+    }
+  }
+}
+
 module.exports = {
+  FINAL_STATUSES,
   STATUSES,
   buildEmbed,
   formatError,
   formatSize,
+  interactionTarget,
+  messageTarget,
   sendVideoFile,
-  trackVideo,
+  trackVideos,
+  trackingPayload,
 };

@@ -11,21 +11,21 @@ const logger = require("../utils/logger");
 const pixelauto = require("../utils/pixelauto");
 const replyWithCode = require("../utils/replyWithCode");
 const {
+  attachmentSource,
+  formatFailures,
+  submitEpisodes,
+} = require("../utils/episodes");
+const {
   STATUSES,
-  buildEmbed,
   formatError,
+  interactionTarget,
   sendVideoFile,
-  trackVideo,
+  trackVideos,
+  trackingPayload,
 } = require("../utils/videoTracker");
-const { translateJsonError } = require("./json");
 
-const MAX_EPISODE_BYTES = 1024 * 1024;
-const REQUEST_TIMEOUT_MS = 10_000;
 // Discord laisse 3 s pour répondre à une autocomplétion.
 const AUTOCOMPLETE_TIMEOUT_MS = 2500;
-
-const NOT_CONFIGURED =
-  "❌ L'API pixelauto n'est pas configurée (PIXELAUTO_URL et API_KEY dans le .env).";
 
 function addIdOption(subcommand) {
   return subcommand.addStringOption((option) =>
@@ -54,77 +54,40 @@ async function withApiErrors(interaction, action) {
  * Met en file d'attente l'épisode saisi (fichier joint ou modale), puis suit
  * son rendu dans un message public.
  * @param {import("discord.js").ChatInputCommandInteraction | import("discord.js").ModalSubmitInteraction} interaction
- * @param {() => Promise<string>} readEpisode - Lit le JSON de l'épisode.
+ * @param {{ name: string | null, read: () => Promise<string> }} source
  */
-async function submitEpisode(interaction, readEpisode) {
+async function submitEpisode(interaction, source) {
   // Les erreurs restent privées ; seul le suivi du rendu est public.
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  let input;
-  try {
-    input = await readEpisode();
-  } catch (error) {
-    await interaction.editReply(`❌ ${error.message}`);
+  const { videos, failures } = await submitEpisodes(
+    [source],
+    interaction.user.tag,
+  );
+  if (videos.length === 0) {
+    await interaction.editReply(formatFailures(failures));
     return;
   }
 
-  let body;
-  try {
-    body = JSON.parse(input);
-  } catch (error) {
-    await interaction.editReply(
-      `❌ JSON invalide : ${translateJsonError(error.message)}.`,
-    );
-    return;
-  }
-  if (!body || typeof body !== "object" || Array.isArray(body)) {
-    await interaction.editReply("❌ L'épisode doit être un objet JSON.");
-    return;
-  }
-
-  await withApiErrors(interaction, async () => {
-    const created = await pixelauto.createVideo(body);
-    const episode = body.episode ?? body;
-    const video = {
-      status: "queued",
-      title: episode.title,
-      episode: episode.id,
-      ...created,
-    };
-
-    const message = await interaction.followUp({
-      embeds: [buildEmbed(video)],
-    });
-    await interaction.editReply(
-      `✅ Épisode envoyé : rendu \`${video.id}\`, suivi ci-dessous.`,
-    );
-    logger.info(
-      `Rendu ${video.id} (${video.episode}) demandé par ${interaction.user.tag}.`,
-    );
-    trackVideo(interaction, video, message).catch((error) => {
+  const [video] = videos;
+  const message = await interaction.followUp(
+    trackingPayload(videos, interaction.user.id),
+  );
+  await interaction.editReply(
+    `✅ Épisode envoyé : rendu \`${video.id}\`, suivi ci-dessous.`,
+  );
+  trackVideos(interactionTarget(interaction, message), videos).catch(
+    (error) => {
       logger.error(`Erreur pendant le suivi du rendu ${video.id} :`, error);
-    });
-  });
-}
-
-async function readAttachment(attachment) {
-  if (attachment.size > MAX_EPISODE_BYTES) {
-    throw new Error("Fichier trop volumineux (1 Mo maximum).");
-  }
-  const response = await fetch(attachment.url, {
-    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-  });
-  if (!response.ok) {
-    throw new Error(`Impossible de lire le fichier (${response.status}).`);
-  }
-  return response.text();
+    },
+  );
 }
 
 const subcommands = {
   async creer(interaction) {
     const attachment = interaction.options.getAttachment("fichier");
     if (attachment) {
-      await submitEpisode(interaction, () => readAttachment(attachment));
+      await submitEpisode(interaction, attachmentSource(attachment));
       return;
     }
 
@@ -151,13 +114,15 @@ const subcommands = {
     const id = interaction.options.getString("id", true).trim();
     await interaction.deferReply();
     await withApiErrors(interaction, async () => {
-      const video = await pixelauto.getVideo(id);
-      const message = await interaction.editReply({
-        embeds: [buildEmbed(video)],
-      });
-      trackVideo(interaction, video, message).catch((error) => {
-        logger.error(`Erreur pendant le suivi du rendu ${id} :`, error);
-      });
+      const videos = [await pixelauto.getVideo(id)];
+      const message = await interaction.editReply(
+        trackingPayload(videos, interaction.user.id),
+      );
+      trackVideos(interactionTarget(interaction, message), videos).catch(
+        (error) => {
+          logger.error(`Erreur pendant le suivi du rendu ${id} :`, error);
+        },
+      );
     });
   },
 
@@ -246,7 +211,7 @@ module.exports = {
       subcommand
         .setName("creer")
         .setDescription(
-          "Lance le rendu d'une vidéo à partir d'un épisode JSON.",
+          "Lance le rendu d'une vidéo (pour plusieurs : mentionner le bot avec les fichiers .json).",
         )
         .addAttachmentOption((option) =>
           option
@@ -340,7 +305,7 @@ module.exports = {
   async execute(interaction) {
     if (!pixelauto.isConfigured()) {
       await interaction.reply({
-        content: NOT_CONFIGURED,
+        content: pixelauto.NOT_CONFIGURED_MESSAGE,
         flags: MessageFlags.Ephemeral,
       });
       return;
