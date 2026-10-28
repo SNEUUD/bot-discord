@@ -24,7 +24,6 @@ Renseigner dans `.env` :
 - `DISCORD_TOKEN` : token du bot (portail développeur Discord > Bot)
 - `CLIENT_ID` : ID de l'application (utilisé uniquement par `npm run deploy`)
 - `GUILD_ID` (optionnel) : ID d'un serveur pour un enregistrement instantané des commandes. Sans elle, l'enregistrement est global (peut prendre jusqu'à 1h à se propager).
-- `PIXELAUTO_URL` et `API_KEY` (optionnels) : URL de base et clé de l'API pixelauto, nécessaires à `/video`.
 
 ## Utilisation
 
@@ -53,19 +52,8 @@ Les commandes slash sont enregistrées automatiquement à chaque démarrage du b
 | `/http <code>` | Explique un code de statut HTTP (avec autocomplétion) |
 | `/npm <paquet>` | Version, licence, téléchargements et date de publication d'un paquet |
 | `/color <valeur>` | Aperçu d'une couleur et conversions HEX / RGB / HSL |
-| `/video creer [fichier]` | Lance le rendu d'une vidéo pixelauto à partir d'un épisode JSON (fichier joint, ou champ de saisie jusqu'à 4000 caractères) |
-| `@bot` + fichiers `.json` | Lance le rendu de chaque fichier joint au message (jusqu'à 10), avec un seul message de suivi |
-| `/video suivre <id>` | Suit un rendu en direct (file d'attente, étape, progression) et envoie le MP4 à la fin |
-| `/video telecharger <id>` | Envoie le MP4 d'un rendu terminé |
-| `/video liste [nombre]` | Derniers rendus |
-| `/video journal <id>` | Journal d'un rendu (utile en cas d'échec) |
-| `/video annuler <id>` | Annule un rendu en cours, ou supprime un rendu terminé et son MP4 |
 
 Les réponses des commandes utilitaires sont éphémères (visibles uniquement par l'auteur de la commande) ; un résultat trop long pour un message est envoyé en fichier joint.
-
-Pour lancer plusieurs vidéos d'un coup, envoyer un message qui mentionne le bot avec les fichiers `.json` en pièces jointes. Les épisodes sont envoyés à l'API dans l'ordre ; ceux qui sont refusés (JSON invalide, épisode invalide, file pleine) sont listés au-dessus du suivi sans bloquer les autres. Le message de suivi affiche une ligne par vidéo et un menu pour annuler un ou plusieurs rendus ; chaque MP4 est envoyé dès qu'il est prêt. La mention est nécessaire : sans l'intent privilégié « Message Content », Discord ne transmet au bot que les pièces jointes des messages qui le mentionnent. Le bot doit pouvoir voir le salon, y envoyer des messages et des fichiers, et lire l'historique (pour répondre au message).
-
-Après `/video creer`, le message de suivi est public et mis à jour toutes les 4 s, avec un bouton pour annuler le rendu. À la fin, le bot mentionne l'auteur et envoie la vidéo (ou l'erreur). Si le MP4 dépasse la limite d'envoi du serveur (10 Mo sans boost), le bot l'indique : la vidéo reste téléchargeable depuis l'API pendant 14 jours. Le suivi s'arrête si le bot redémarre : le reprendre avec `/video suivre`.
 
 ## Ajouter une commande
 

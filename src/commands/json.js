@@ -138,7 +138,6 @@ module.exports = {
         ),
     ),
   processJson,
-  translateJsonError,
   async execute(interaction) {
     const mode = interaction.options.getString("mode") ?? "formater";
     const input = interaction.options.getString("json");
